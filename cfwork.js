@@ -1,34 +1,33 @@
 /**
  * =================================================================================
  * 项目: aqua-2api (Cloudflare Worker 单文件版)
- * 版本: 4.6.0 (代号: Chimera Synthesis - Ultimate Edition)
+ * 版本: 4.9.1 (代号: Chimera Synthesis - Free Tier Optimized Edition)
  * 作者: 首席AI执行官 (Principal AI Executive Officer) & Gemini
  * 协议: 奇美拉协议 · 终极版
- * * [v4.6.0 终极进化]
- * 1. [多轮上下文树] 引入 UUID 消息追踪，支持编辑、删除、以及 Git-like 分支对话。
- * 2. [自适应上下文] 实时 Token 估算进度条，达 180K 自动触发滑动窗口压缩，永久不断连。
- * 3. [动态物理引擎] 引入 Damping 阻尼气泡动画，移动端完美适配，侧边栏平滑折叠。
- * 4. [环境感知变色] 根据选择的模型（文本/绘图/视频）自动过渡全局 UI 色彩。
- * 5. [Auto-Fallback] GPT-5 等主模型宕机时，底层自动无缝降级重试。
- * 6. [骨架屏渲染] 视频和长链任务引入抽象帧骨架占位，取代枯燥的文字。
+ * * [v4.9.1 终极进化]
+ * 1. [免费用户专享过滤] 在前端自动屏蔽 15 款 Premium 高级收费模型，列表更加清爽纯净。
+ * 2. [移动端空间释放] 重构参数面板为超紧凑 Input Group 布局，彻底解决输入区占用痛点。
+ * 3. [媒体下载引擎] 为 AI 绘图与视频引入纯前端 Blob 原生下载协议，一键保存至本地。
+ * 4. [降级安全保护] 将底层兜底模型修改为免费标准的 gpt-5.4-mini，杜绝偷跑越权。
+ * 5. [100% CF 原生反代] 图床上传、流式请求、媒体下载全部走 Worker 同源策略，国内免翻。
  * =================================================================================
  */
 
 // ---[第一部分: 核心配置 (Configuration-as-Code)] ---
 const CONFIG = {
   PROJECT_NAME: "aqua-2api",
-  PROJECT_VERSION: "4.6.0",
+  PROJECT_VERSION: "4.9.1",
 
   // 安全配置 (主密钥)
   API_MASTER_KEY: "1", 
-  BUILTIN_KEY: "这里输入你自己的key",
+  BUILTIN_KEY: "你的key",
 
   // 上游服务配置
   UPSTREAM_URL: "https://api.aquadevs.com",
   
   // 默认模型配置
-  DEFAULT_CHAT_MODEL: "gpt-5",
-  FALLBACK_CHAT_MODEL: "step-3.5", // 自动降级模型
+  DEFAULT_CHAT_MODEL: "grok-4.2",
+  FALLBACK_CHAT_MODEL: "gpt-5.4-mini", // 自动降级模型 (已修改为免费模型)
   DEFAULT_IMAGE_MODEL: "flux-2",
   DEFAULT_VIDEO_MODEL: "grok-video",
 
@@ -40,7 +39,7 @@ const CONFIG = {
 
 // ---[补充部分: 静态脚本拦截 (PWA & Markdown Worker)] ---
 const SW_CODE = `
-const CACHE_NAME = 'aqua-v4.6-cache';
+const CACHE_NAME = 'aqua-v4.9-cache';
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('fetch', e => {
     if (e.request.url.includes('cdn.jsdelivr.net') || e.request.url.includes('unpkg.com')) {
@@ -75,15 +74,23 @@ function renderMath(text) {
 
 marked.setOptions({
     highlight: function(code, lang) {
-        if (Prism.languages[lang]) return Prism.highlight(code, Prism.languages[lang], lang);
-        return Prism.highlight(code, Prism.languages.javascript, 'javascript');
+        try {
+            if (Prism.languages[lang]) return Prism.highlight(code, Prism.languages[lang], lang);
+            return Prism.highlight(code, Prism.languages.javascript, 'javascript');
+        } catch (err) {
+            return code; // 终极降级保护，防止语法树解析崩溃阻断主线程
+        }
     }
 });
 
 self.onmessage = function(e) {
     const { id, text } = e.data;
-    let processedText = renderMath(text);
-    self.postMessage({ id, html: marked.parse(processedText) });
+    try {
+        let processedText = renderMath(text);
+        self.postMessage({ id, html: marked.parse(processedText) });
+    } catch (err) {
+        self.postMessage({ id, html: text }); // 若 Marked 引擎崩溃直接原样返回
+    }
 };
 `;
 
@@ -297,7 +304,7 @@ async function handleModelsRequest(request, authKey, ctx, logger) {
   const cache = caches.default;
   const cacheKey = new Request(new URL('/v1/models', 'https://aqua-2api.cache').toString());
   let response = await cache.match(cacheKey);
-  const userAgent = request.headers.get('User-Agent') || 'Aqua-Worker/4.6.0';
+  const userAgent = request.headers.get('User-Agent') || 'Aqua-Worker/4.9.1';
 
   const fetchAndUpdate = async () => {
     try {
@@ -320,7 +327,7 @@ async function handleModelsRequest(request, authKey, ctx, logger) {
 
 async function handleChatCompletions(request, authKey, logger) {
   const body = await request.json();
-  const userAgent = request.headers.get('User-Agent') || 'Aqua-Worker/4.6.0';
+  const userAgent = request.headers.get('User-Agent') || 'Aqua-Worker/4.9.1';
   
   if (body.messages) {
       for (let msg of body.messages) {
@@ -350,7 +357,7 @@ async function handleChatCompletions(request, authKey, logger) {
 async function handleImageGenerations(request, authKey, logger, ctx) {
   const body = await request.json();
   const isStream = body.stream === true; 
-  const userAgent = request.headers.get('User-Agent') || 'Aqua-Worker/4.6.0';
+  const userAgent = request.headers.get('User-Agent') || 'Aqua-Worker/4.9.1';
   
   const size = body.size || "1:1";
   let ratio = "square";
@@ -412,7 +419,7 @@ async function handleVideoGenerations(request, authKey, logger, ctx) {
   const body = await request.json();
   const isStream = body.stream === true;
   const payload = { model: body.model || CONFIG.DEFAULT_VIDEO_MODEL, prompt: body.prompt };
-  const userAgent = request.headers.get('User-Agent') || 'Aqua-Worker/4.6.0';
+  const userAgent = request.headers.get('User-Agent') || 'Aqua-Worker/4.9.1';
 
   const res = await fetchUpstream(`${CONFIG.UPSTREAM_URL}/v1/video/generations`, {
     method: 'POST',
@@ -462,7 +469,7 @@ async function handleVideoGenerations(request, authKey, logger, ctx) {
 
 async function handleTaskPoll(request, taskId, authKey, logger) {
   const res = await fetchUpstream(`${CONFIG.UPSTREAM_URL}/v1/images/tasks/${taskId}`, {
-    headers: { 'Authorization': `Bearer ${authKey}`, 'User-Agent': request.headers.get('User-Agent') || 'Aqua/4.6' }, cf: { http3: 'on' }
+    headers: { 'Authorization': `Bearer ${authKey}`, 'User-Agent': request.headers.get('User-Agent') || 'Aqua/4.9.1' }, cf: { http3: 'on' }
   }, logger);
   if (!res.ok) throw new Error(`Poll Error: ${await res.text()}`);
   return new Response(JSON.stringify(await res.json()), { headers: corsHeaders({ 'Content-Type': 'application/json' }) });
@@ -471,7 +478,7 @@ async function handleTaskPoll(request, taskId, authKey, logger) {
 async function handleToolsRequest(request, authKey, path, logger) {
   const res = await fetchUpstream(`${CONFIG.UPSTREAM_URL}${path}`, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${authKey}`, 'Content-Type': 'application/json', 'User-Agent': request.headers.get('User-Agent') || 'Aqua/4.6' },
+    headers: { 'Authorization': `Bearer ${authKey}`, 'Content-Type': 'application/json', 'User-Agent': request.headers.get('User-Agent') || 'Aqua/4.9.1' },
     body: JSON.stringify(await request.json()), cf: { http3: 'on' }
   }, logger);
   const newHeaders = new Headers(res.headers);
@@ -568,12 +575,22 @@ function handleUI(request, env) {
         font-family: var(--font-family); margin: 0; 
         background: var(--bg-gradient); color: var(--text-color); 
         font-size: 14px; display: flex; height: 100vh; height: 100dvh; overflow: hidden;
+        overscroll-behavior-y: none; /* 防止移动端下拉刷新引起页面跳动 */
         transition: var(--ui-transition);
       }
       
       /* 布局与毛玻璃外壳 */
       .layout { display: flex; width: 100%; height: 100%; position: relative; z-index: 2; }
       
+      /* 移动端深色遮罩层 */
+      .sidebar-mask {
+        display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        z-index: 40; opacity: 0; transition: opacity 0.3s ease;
+      }
+      .sidebar-mask.open { display: block; opacity: 1; }
+
       /* 背景炫光装饰 */
       .bg-orb { position: absolute; border-radius: 50%; filter: blur(80px); z-index: 1; opacity: 0.5; pointer-events: none; transition: var(--ui-transition); }
       .bg-orb-1 { width: 400px; height: 400px; background: var(--primary-color); top: -100px; left: -100px; }
@@ -586,129 +603,148 @@ function handleUI(request, env) {
         width: 340px; flex-shrink: 0; 
         background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
         border-right: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
-        display: flex; flex-direction: column; z-index: 10;
+        display: flex; flex-direction: column; z-index: 50;
         transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1);
       }
       .sidebar-header { padding: 24px 20px; border-bottom: 1px solid var(--glass-border); }
       .sidebar-content { flex: 1; overflow-y: auto; padding: 20px; }
       .main-content { flex: 1; display: flex; flex-direction: column; background: transparent; position: relative; z-index: 5; width: 100%; }
       
-      /* 基础组件微交互 */
       h1 { margin: 0; font-size: 20px; color: var(--primary-color); display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -0.5px;}
       .badge { font-size: 11px; background: var(--primary-color); color: #fff; padding: 3px 8px; border-radius: 12px; font-weight: bold; box-shadow: 0 0 10px var(--primary-glow); }
       
       .box { 
         background: var(--input-bg); padding: 15px; border-radius: 12px; 
         border: 1px solid var(--glass-border); margin-bottom: 15px;
-        transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s;
       }
-      .box:hover { transform: translateY(-2px); box-shadow: var(--glass-shadow); }
-      .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; display: block; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;}
       
-      input, select, textarea { 
+      /* 重置原生 select 样式 */
+      select {
+        appearance: none; -webkit-appearance: none;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 10px center; background-size: 14px; padding-right: 30px;
+      }
+      @media (prefers-color-scheme: dark) {
+        select { background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); }
+      }
+
+      /* 超紧凑参数组件 (Input Group) - 核心排版重构 */
+      .param-compact {
+          display: flex; align-items: center; background: rgba(0,0,0,0.03);
+          border: 1px solid var(--glass-border); border-radius: 10px;
+          padding-left: 12px;
+      }
+      @media (prefers-color-scheme: dark) { .param-compact { background: rgba(255,255,255,0.03); } }
+      .param-compact .label { margin: 0; padding-right: 8px; border-right: 1px solid var(--glass-border); white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;}
+      .param-compact select { border: none; background: transparent; margin: 0; padding: 0 10px; flex: 1; min-height: 40px; color: var(--text-color); font-family: inherit;}
+      .param-compact select:focus { outline: none; box-shadow: none; background: transparent;}
+      
+      .param-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+      .param-row > .param-compact { flex: 1; min-width: 140px; }
+
+      input[type="password"] { 
+        width: 100%; background: rgba(0,0,0,0.03); border: 1px solid var(--glass-border); 
+        color: var(--text-color); padding: 12px; border-radius: 10px; font-family: inherit; margin-bottom:0;
+      }
+      
+      textarea { 
         width: 100%; background: rgba(0,0,0,0.03); border: 1px solid var(--glass-border); 
         color: var(--text-color); padding: 12px; border-radius: 10px; font-family: inherit; 
-        margin-bottom: 10px; transition: all 0.3s ease; backdrop-filter: blur(4px);
+        transition: all 0.3s ease; backdrop-filter: blur(4px);
+        resize: none; min-height: 44px; margin: 0;
       }
-      @media (prefers-color-scheme: dark) { input, select, textarea { background: rgba(255,255,255,0.03); } }
-      input:focus, select:focus, textarea:focus { 
-        outline: none; border-color: var(--primary-color); 
-        box-shadow: 0 0 0 3px var(--primary-glow); background: var(--glass-bg);
-      }
-      textarea { resize: none; min-height: 80px; }
+      @media (prefers-color-scheme: dark) { textarea, input[type="password"] { background: rgba(255,255,255,0.03); } }
+      textarea:focus, input[type="password"]:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px var(--primary-glow); background: var(--glass-bg); }
       
       button { 
-        width: 100%; padding: 12px; background: var(--primary-color); border: none; 
+        padding: 12px; background: var(--primary-color); border: none; 
         border-radius: 10px; font-weight: bold; cursor: pointer; color: #fff; 
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
         display: flex; justify-content: center; align-items: center; gap: 8px;
-        box-shadow: 0 4px 15px var(--primary-glow);
+        box-shadow: 0 4px 15px var(--primary-glow); min-height: 44px;
       }
-      button:hover { background: var(--primary-hover); transform: translateY(-2px) scale(1.01); box-shadow: 0 6px 20px var(--primary-glow); }
+      button:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 6px 20px var(--primary-glow); }
       button:active { transform: scale(0.97); }
       
-      /* 终端标签区 */
       .terminal-header { 
         display: flex; background: var(--glass-bg); backdrop-filter: var(--glass-blur); 
         border-bottom: 1px solid var(--glass-border); overflow-x: auto; white-space: nowrap; padding: 0 10px;
-        -webkit-overflow-scrolling: touch;
+        -webkit-overflow-scrolling: touch; scrollbar-width: none;
       }
       .terminal-header::-webkit-scrollbar { display: none; }
-      .tab { 
-        padding: 16px 20px; cursor: pointer; color: var(--text-secondary); font-weight: 600; 
-        border-bottom: 3px solid transparent; transition: all 0.3s; position: relative;
-      }
+      .tab { padding: 16px 20px; cursor: pointer; color: var(--text-secondary); font-weight: 600; border-bottom: 3px solid transparent; transition: all 0.3s; }
       .tab:hover { color: var(--text-color); }
       .tab.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
       
-      .chat-box { flex: 1; padding: 30px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; scroll-behavior: smooth; }
+      .chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; scroll-behavior: smooth; }
       
-      /* 物理阻尼动效气泡 & 交互控制区 */
-      .msg-wrapper { display: flex; flex-direction: column; gap: 4px; position: relative; width: 100%; animation: msgPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-      .msg { 
-        max-width: 85%; padding: 16px 20px; border-radius: 16px; line-height: 1.6; 
-        position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.05); 
-      }
-      @keyframes msgPop { 0% { opacity: 0; transform: translateY(20px) scale(0.95); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+      .msg-wrapper { display: flex; flex-direction: column; gap: 4px; width: 100%; animation: msgPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+      .msg-wrapper.user { align-items: flex-end; }
+      .msg-wrapper.ai { align-items: flex-start; }
+
+      .msg { max-width: 85%; padding: 14px 18px; border-radius: 16px; line-height: 1.6; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+      @keyframes msgPop { 0% { opacity: 0; transform: translateY(15px) scale(0.98); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
       
-      .msg.user { align-self: flex-end; background: var(--msg-user-bg); color: var(--msg-user-color); border-bottom-right-radius: 4px; border: 1px solid var(--glass-border);}
-      .msg.ai { align-self: flex-start; background: var(--msg-ai-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border); border-bottom-left-radius: 4px; width: 100%; overflow-x: hidden; }
+      .msg.user { background: var(--msg-user-bg); color: var(--msg-user-color); border-bottom-right-radius: 4px; border: 1px solid var(--glass-border);}
+      .msg.ai { background: var(--msg-ai-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border); border-bottom-left-radius: 4px; width: 100%; overflow-x: hidden; }
       .msg.error { border-color: var(--error-color); background: rgba(239, 68, 68, 0.1); color: var(--error-color); }
       
-      /* 消息操作面板 */
-      .msg-actions { 
-          display: flex; gap: 8px; opacity: 0; transition: opacity 0.3s; 
-          align-self: flex-end; font-size: 12px; margin-top: -2px; padding: 0 10px;
-      }
+      .msg-actions { display: flex; gap: 8px; opacity: 0; transition: opacity 0.3s; font-size: 12px; margin-top: -2px; padding: 0 10px; flex-wrap: wrap; }
       .msg-wrapper:hover .msg-actions { opacity: 1; }
-      .action-btn { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 8px; cursor: pointer; color: var(--text-secondary); backdrop-filter: blur(4px); box-shadow: none; width: auto;}
-      .action-btn:hover { color: var(--primary-color); border-color: var(--primary-color); transform: none; }
+      .action-btn { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 6px; padding: 6px 10px; cursor: pointer; color: var(--text-secondary); backdrop-filter: blur(4px); box-shadow: none; width: auto; min-height: 28px; font-weight: normal;}
+      .action-btn:hover { color: var(--primary-color); border-color: var(--primary-color); transform: none; background: var(--glass-bg);}
 
-      /* Markdown 样式 */
       .msg.ai p { margin-top: 0; }
       .msg.ai pre { background: rgba(0,0,0,0.8); padding: 16px; border-radius: 12px; overflow-x: auto; border: 1px solid rgba(255,255,255,0.1); margin: 12px 0; }
       .msg.ai code { font-family: var(--font-mono); font-size: 13px; color: #e2e8f0; }
       .msg.ai img, .msg.ai video { max-width: 100%; border-radius: 12px; margin-top: 12px; border: 1px solid var(--glass-border); cursor: zoom-in; box-shadow: var(--glass-shadow); transition: transform 0.3s;}
-      .msg.ai img:hover, .msg.ai video:hover { transform: scale(1.02); }
       
-      /* 骨架屏占位动画 */
-      .skeleton-media {
-          width: 100%; height: 250px; background: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.1) 75%);
-          background-size: 400% 100%; animation: skeleton-loading 1.5s infinite ease-in-out; border-radius: 12px; border: 1px dashed var(--glass-border); display: flex; align-items: center; justify-content: center; color: var(--text-secondary); font-weight: bold;
-      }
+      .skeleton-media { width: 100%; height: 200px; background: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.1) 75%); background-size: 400% 100%; animation: skeleton-loading 1.5s infinite ease-in-out; border-radius: 12px; border: 1px dashed var(--glass-border); display: flex; align-items: center; justify-content: center; color: var(--text-secondary); font-weight: bold; }
       @media (prefers-color-scheme: dark) { .skeleton-media { background: linear-gradient(90deg, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.2) 75%); } }
       @keyframes skeleton-loading { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
 
-      /* 上传与画廊 */
-      .upload-zone { border: 2px dashed var(--glass-border); border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 10px; background: rgba(0,0,0,0.02); }
+      /* 极简上传区 */
+      .upload-zone { border: 2px dashed var(--glass-border); border-radius: 10px; padding: 12px; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 8px; background: rgba(0,0,0,0.02); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50px;}
       .upload-zone.dragover { border-color: var(--primary-color); background: var(--primary-glow); transform: scale(1.02); }
-      .image-queue { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 5px; }
-      .queue-item { position: relative; width: 64px; height: 64px; flex-shrink: 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--glass-border); }
+      .image-queue { display: flex; gap: 8px; overflow-x: auto; padding-top: 5px; width: 100%; justify-content: center;}
+      .queue-item { position: relative; width: 44px; height: 44px; flex-shrink: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--glass-border); }
       .queue-item img { width: 100%; height: 100%; object-fit: cover; }
       
-      /* 智能进度与 Token 监控 */
       .token-monitor { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; padding: 0 4px; }
       .progress-container { width: 100%; background: rgba(0,0,0,0.1); height: 6px; border-radius: 3px; overflow: hidden; border: 1px solid var(--glass-border); }
       .progress-bar { height: 100%; background: var(--primary-color); box-shadow: 0 0 10px var(--primary-glow); transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
       .progress-bar.warning { background: var(--warning-color); box-shadow: 0 0 10px var(--warning-color); }
       .progress-bar.danger { background: var(--error-color); box-shadow: 0 0 10px var(--error-color); }
       
-      .input-area { padding: 20px 24px; background: var(--glass-bg); backdrop-filter: var(--glass-blur); border-top: 1px solid var(--glass-border); box-shadow: 0 -10px 40px rgba(0,0,0,0.05);}
-      .param-row { display: flex; gap: 12px; margin-bottom: 12px; }
-      .param-row > div { flex: 1; }
+      .input-area { padding: 15px 20px; background: var(--glass-bg); backdrop-filter: var(--glass-blur); border-top: 1px solid var(--glass-border); box-shadow: 0 -10px 40px rgba(0,0,0,0.05);}
+      
       .panel { display: none; animation: fadeIn 0.3s ease; }
       .panel.active { display: block; }
       @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-      /* 移动端响应式 */
+      /* ======================================================== */
+      /* 移动端终极空间释放优化 (Space Optimization)              */
+      /* ======================================================== */
       @media (max-width: 768px) {
-          .menu-toggle { display: block; }
-          .sidebar { position: fixed; left: -340px; height: 100%; box-shadow: 20px 0 50px rgba(0,0,0,0.5); }
-          .sidebar.open { left: 0; }
-          .terminal-header { padding-left: 50px; } /* 为汉堡菜单留空间 */
-          .msg { max-width: 95%; }
-          .input-area { padding: 15px; }
-          .param-row { flex-direction: column; gap: 6px; }
+          .menu-toggle { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; top: 8px; left: 8px; font-size: 18px; }
+          .sidebar { position: fixed; transform: translateX(-100%); height: 100%; box-shadow: 20px 0 50px rgba(0,0,0,0.5); width: 300px; left: 0;}
+          .sidebar.open { transform: translateX(0); }
+          .terminal-header { padding-left: 60px; }
+          .msg { max-width: 95%; font-size: 15px; }
+          .msg-actions { opacity: 1; }
+          
+          /* 核心：极其紧凑的底部安全区适配，释放 50% 占用 */
+          .input-area { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+          
+          /* 核心：字号严格 16px 防止 iOS 聚焦放大 */
+          select, textarea { font-size: 16px !important; }
+          
+          .param-compact { min-height: 38px; }
+          .param-compact select { padding: 0 8px; min-height: 38px;}
+          .param-row { gap: 6px; margin-bottom: 6px;}
+          
+          #prompt { height: 44px; min-height: 44px; }
+          #btn-send { width: 75px; font-size: 14px; padding: 0; }
       }
     </style>
 </head>
@@ -716,47 +752,51 @@ function handleUI(request, env) {
     <div class="bg-orb bg-orb-1"></div>
     <div class="bg-orb bg-orb-2"></div>
     
-    <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">🍔 菜单</button>
-
     <div class="layout">
+        <div class="sidebar-mask" onclick="toggleMobileMenu()"></div>
+        
         <aside class="sidebar">
             <div class="sidebar-header">
                 <h1>🌊 Cockpit <span class="badge">PRO MAX</span></h1>
                 <div style="margin-top: 8px; font-size: 11px; color: var(--text-secondary); display:flex; justify-content:space-between;">
-                    <span>系统矩阵在线</span>
+                    <span>全链路代理原生在线</span>
                     <span id="auto-fallback-indicator" style="display:none; color:var(--warning-color);">降级保护触发</span>
                 </div>
             </div>
             
             <div class="sidebar-content">
                 <div class="box">
-                    <span class="label">当前会话 Token 探针</span>
+                    <span class="label" style="font-size: 12px; margin-bottom: 8px;">当前会话 Token 探针</span>
                     <div class="token-monitor">
                         <span>记忆体用量</span><span id="token-count">0 / 180K</span>
                     </div>
                     <div class="progress-container" style="height: 4px;">
                         <div id="token-bar" class="progress-bar" style="width: 0%;"></div>
                     </div>
-                    <p style="font-size:10px; color:var(--text-secondary); margin-top:8px;">* 若接近 180K，系统将触发滑动窗口压缩重组历史。</p>
+                    <p style="font-size:10px; color:var(--text-secondary); margin-top:8px; margin-bottom:0;">* 若接近 180K，系统将触发滑动窗口压缩重组历史。</p>
                 </div>
                 
                 <div class="box">
-                    <span class="label">API 密钥 (点击复制)</span>
-                    <input type="password" id="api-key" value="${masterKey}" readonly onclick="copyText(this.value); this.type='text'; setTimeout(()=>this.type='password', 2000)">
+                    <span class="label" style="font-size: 12px; margin-bottom: 8px;">API 密钥 (点击复制)</span>
+                    <form autocomplete="off" onsubmit="return false;" style="margin:0; padding:0;">
+                        <input type="password" id="api-key" value="${masterKey}" readonly onclick="copyText(this.value); this.type='text'; setTimeout(()=>this.type='password', 2000)">
+                    </form>
                 </div>
 
                 <div class="history-panel box" style="background:transparent; border:none; padding:0; margin-top:20px;">
-                    <span class="label" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span class="label" style="display:flex; justify-content:space-between; align-items:center; font-size: 12px; margin-bottom: 8px;">
                         <span>📜 历史记忆体</span>
                         <span style="cursor:pointer; color:var(--error-color);" onclick="clearHistory()">净化</span>
                     </span>
-                    <button class="action-btn" style="width:100%; margin-bottom:10px;" onclick="startNewSession()">+ 开启全新纪元分支</button>
+                    <button class="action-btn" style="width:100%; margin-bottom:10px; justify-content:center;" onclick="startNewSession()">+ 开启全新纪元分支</button>
                     <div id="history-list" style="max-height: 200px; overflow-y:auto;"></div>
                 </div>
             </div>
         </aside>
 
         <main class="main-content">
+            <button class="menu-toggle" onclick="toggleMobileMenu()">☰</button>
+            
             <div class="terminal-header">
                 <div class="tab active" data-target="chat">💬 超维对话</div>
                 <div class="tab" data-target="image">🎨 绘图引擎</div>
@@ -767,44 +807,44 @@ function handleUI(request, env) {
             <div class="chat-box" id="chat-box">
                 <div style="text-align:center; color:var(--text-secondary); margin-top:10vh; animation: fadeIn 1s ease;" id="welcome-msg">
                     <div style="font-size:56px; margin-bottom:20px;">💠</div>
-                    <h2 style="color:var(--text-color); font-weight:800;">会话树已构建</h2>
-                    <p style="max-width:400px; margin:0 auto; line-height:1.8;">支持 Token 动态压缩、分支对话与环境感知变色。</p>
+                    <h2 style="color:var(--text-color); font-weight:800; margin-bottom: 10px;">代理会话树已构建</h2>
+                    <p style="max-width:400px; margin:0 auto; line-height:1.8;">全链路由 CF Worker 在海外为您转发，极致压缩排版。<br><span style="font-size:12px; color:var(--warning-color);">注: 建议在 CF 绑定自有域名，即可在国内完全免翻直连。</span></p>
                 </div>
             </div>
 
             <div class="input-area" id="input-area">
                 <div id="panel-chat" class="panel active">
                     <div class="param-row">
-                        <div><span class="label">推理核心</span><select id="chat-model" onchange="updateThemeAndSave()"><option>加载中...</option></select></div>
+                        <div class="param-compact"><span class="label">模型选择</span><select id="chat-model" onchange="updateThemeAndSave()"><option>加载中...</option></select></div>
                     </div>
                 </div>
 
                 <div id="panel-image" class="panel">
                     <div class="param-row">
-                        <div><span class="label">图像引擎</span><select id="image-model" onchange="updateThemeAndSave()"><option>加载中...</option></select></div>
-                        <div><span class="label">画幅比例</span><select id="image-ratio" onchange="updateThemeAndSave()"><option value="1:1">1:1</option><option value="16:9">16:9</option><option value="9:16">9:16</option></select></div>
+                        <div class="param-compact"><span class="label">模型选择</span><select id="image-model" onchange="updateThemeAndSave()"><option>加载中...</option></select></div>
+                        <div class="param-compact"><span class="label">画幅比例</span><select id="image-ratio" onchange="updateThemeAndSave()"><option value="1:1">1:1</option><option value="16:9">16:9</option><option value="9:16">9:16</option></select></div>
                     </div>
                     <div class="upload-zone" id="upload-zone">
-                        <span style="color:var(--text-secondary); font-size: 12px;">点击或拖拽视觉物料 (自动进行 URL 转换)</span>
-                        <div class="image-queue" id="image-queue" style="margin-top:10px;"></div>
+                        <span style="color:var(--text-secondary); font-size: 11px;">点击/拖拽提供参考图 (可选)</span>
+                        <div class="image-queue" id="image-queue"></div>
                     </div>
                 </div>
 
                 <div id="panel-video" class="panel">
                     <div class="param-row">
-                        <div><span class="label">视频发生器</span><select id="video-model" onchange="updateThemeAndSave()"><option>加载中...</option></select></div>
+                        <div class="param-compact"><span class="label">模型选择</span><select id="video-model" onchange="updateThemeAndSave()"><option>加载中...</option></select></div>
                     </div>
                 </div>
 
                 <div id="panel-tools" class="panel">
                     <div class="param-row">
-                        <div><span class="label">工具套件</span><select id="tools-type" onchange="updateThemeAndSave()"><option value="extract">网页信息提取</option><option value="search">广域网检索</option></select></div>
+                        <div class="param-compact"><span class="label">工具套件</span><select id="tools-type" onchange="updateThemeAndSave()"><option value="extract">网页信息提取</option><option value="search">广域网检索</option></select></div>
                     </div>
                 </div>
 
-                <div style="display:flex; gap:12px;">
-                    <textarea id="prompt" placeholder="在此输入指令矩阵 (Enter 发送，Shift+Enter 换行)..."></textarea>
-                    <button id="btn-send" style="width: 110px; font-size:15px; border-radius:12px;" onclick="submitRequest()">发送 🚀</button>
+                <div style="display:flex; gap:10px; align-items: flex-end;">
+                    <textarea id="prompt" style="flex:1;" placeholder="在此输入指令矩阵 (Enter 发送，Shift+Enter 换行)..."></textarea>
+                    <button id="btn-send" style="width: 90px; font-size:15px; border-radius:10px; margin: 0;" onclick="submitUserPrompt()">发送 🚀</button>
                 </div>
             </div>
         </main>
@@ -816,13 +856,11 @@ function handleUI(request, env) {
         let abortController = null;
         let uploadedImages = []; 
         
-        // Context Memory & Session Management
-        let currentSessionHistory = []; // Array of { id, role, content, images, html }
+        let currentSessionHistory = []; 
         let currentEstimatedTokens = 0;
 
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
-        // Async Markdown Renderer Worker
         const mdWorker = new Worker('/md-worker.js');
         const renderTasks = new Map();
         mdWorker.onmessage = (e) => {
@@ -831,30 +869,38 @@ function handleUI(request, env) {
         async function renderMarkdownAsync(text) {
             return new Promise(res => { const id = Math.random().toString(36); renderTasks.set(id, res); mdWorker.postMessage({ id, text }); });
         }
-
-        // --- Core UI & UX Functions ---
         
+        window.toggleMobileMenu = function() {
+            const sidebar = document.querySelector('.sidebar');
+            const mask = document.querySelector('.sidebar-mask');
+            sidebar.classList.toggle('open');
+            if (sidebar.classList.contains('open')) {
+                mask.style.display = 'block';
+                void mask.offsetWidth; 
+                mask.classList.add('open');
+            } else {
+                mask.classList.remove('open');
+                setTimeout(() => mask.style.display = 'none', 300);
+            }
+        };
+
         function updateThemeAndSave() {
             savePreferences();
             const root = document.documentElement;
             const modelName = document.getElementById(currentMode + '-model')?.value?.toLowerCase() || '';
             
-            // Dynamic Oklch inspired Hue transition
             if (modelName.includes('flux') || modelName.includes('mj') || modelName.includes('image')) {
-                root.style.setProperty('--theme-hue', '270'); // Purple
+                root.style.setProperty('--theme-hue', '270'); 
             } else if (modelName.includes('video')) {
-                root.style.setProperty('--theme-hue', '340'); // Pink/Red
+                root.style.setProperty('--theme-hue', '340'); 
             } else if (modelName.includes('claude')) {
-                root.style.setProperty('--theme-hue', '25'); // Orange
+                root.style.setProperty('--theme-hue', '25'); 
             } else {
-                root.style.setProperty('--theme-hue', '200'); // Blue (GPT)
+                root.style.setProperty('--theme-hue', '200'); 
             }
         }
 
-        function calculateTokens(text) {
-            // Rough estimation: 1 Chinese char ~ 1.5 tokens, 1 English word ~ 1.3 tokens
-            return Math.ceil(text.length * 1.5);
-        }
+        function calculateTokens(text) { return Math.ceil(text.length * 1.5); }
 
         function updateTokenUI() {
             let total = 0;
@@ -873,13 +919,11 @@ function handleUI(request, env) {
             if (pct > 90) bar.classList.add('danger');
             else if (pct > 75) bar.classList.add('warning');
             
-            // Auto-Compression trigger
             if (total > CFG.MAX_TOKEN) compressContextWindow();
         }
 
         function compressContextWindow() {
             if (currentSessionHistory.length <= 2) return;
-            // Keep index 0 (System/First prompt) and slice older messages from middle
             const keepCount = Math.floor(currentSessionHistory.length / 2);
             currentSessionHistory = [
                 currentSessionHistory[0], 
@@ -914,30 +958,90 @@ function handleUI(request, env) {
             const msg = currentSessionHistory.find(m => m.id === msgId);
             if (msg && msg.role === 'user') {
                 document.getElementById('prompt').value = typeof msg.content === 'string' ? msg.content : msg.content[0].text;
-                branchSession(msgId); // Automatically branch/truncate from this edit point
-                deleteMessage(msgId); // Remove the old message being edited
+                branchSession(msgId); 
+                deleteMessage(msgId); 
             }
         }
+
+        function copyMessageText(msgId) {
+            const msg = currentSessionHistory.find(m => m.id === msgId);
+            if (msg) {
+                const text = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+                copyText(text);
+                const btn = event.target;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '✅ 已复制';
+                setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+            }
+        }
+
+        function regenerateMessage(msgId) {
+            const index = currentSessionHistory.findIndex(m => m.id === msgId);
+            if (index > 0) {
+                currentSessionHistory = currentSessionHistory.slice(0, index);
+                reRenderChatBox();
+                updateTokenUI();
+                triggerAIGeneration(); 
+            }
+        }
+
+        // --- 原生 Blob 媒体极速下载引擎 ---
+        window.downloadMedia = async function(url, type) {
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            try {
+                btn.innerHTML = '⏳ 下载中...';
+                // 通过 Worker 的同源策略直接拉取文件流
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('Fetch failed');
+                const blob = await res.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = \`Aqua_\${type}_\${Date.now()}.\${type === 'video' ? 'mp4' : 'png'}\`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(a.href);
+                
+                btn.innerHTML = '✅ 下载完成';
+                setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+            } catch (err) {
+                console.error("下载失败:", err);
+                btn.innerHTML = '❌ 失败,已弹窗';
+                setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+                window.open(url, '_blank'); // 降级为新标签页打开
+            }
+        };
 
         function reRenderChatBox() {
             const box = document.getElementById('chat-box');
             box.innerHTML = '';
             currentSessionHistory.forEach(msg => {
                 const wrapper = document.createElement('div');
-                wrapper.className = 'msg-wrapper';
+                wrapper.className = 'msg-wrapper ' + msg.role;
                 
                 const div = document.createElement('div');
                 div.className = 'msg ' + msg.role;
                 div.innerHTML = msg.html;
                 
-                // Action buttons
                 const actions = document.createElement('div');
                 actions.className = 'msg-actions';
-                if(msg.role === 'user') actions.innerHTML += \`<button class="action-btn" onclick="editMessage('\${msg.id}')">✏️ 编辑重发</button>\`;
-                actions.innerHTML += \`<button class="action-btn" onclick="branchSession('\${msg.id}')">✂️ 从此处分支</button>\`;
-                actions.innerHTML += \`<button class="action-btn" onclick="deleteMessage('\${msg.id}')">🗑️ 删除</button>\`;
+                
+                if(msg.role === 'user') {
+                    actions.innerHTML += \`<button class="action-btn" onclick="editMessage('\${msg.id}')">✏️ 编辑重发</button>\`;
+                    actions.innerHTML += \`<button class="action-btn" onclick="branchSession('\${msg.id}')">✂️ 分支截断</button>\`;
+                    actions.innerHTML += \`<button class="action-btn" onclick="deleteMessage('\${msg.id}')">🗑️ 删除</button>\`;
+                } else if(msg.role === 'ai') {
+                    actions.innerHTML += \`<button class="action-btn" onclick="copyMessageText('\${msg.id}')">📋 复制答案</button>\`;
+                    // 若含有媒体URL，直接注入纯净下载按钮
+                    if (msg.mediaUrl) {
+                        actions.innerHTML += \`<button class="action-btn" style="color:var(--primary-color); font-weight:bold;" onclick="downloadMedia('\${msg.mediaUrl}', '\${msg.mediaType}')">📥 极速下载</button>\`;
+                    }
+                    actions.innerHTML += \`<button class="action-btn" onclick="regenerateMessage('\${msg.id}')">🔄 重新生成</button>\`;
+                    actions.innerHTML += \`<button class="action-btn" onclick="branchSession('\${msg.id}')">✂️ 分支截断</button>\`;
+                    actions.innerHTML += \`<button class="action-btn" onclick="deleteMessage('\${msg.id}')">🗑️ 删除</button>\`;
+                }
 
-                if (msg.role === 'user') wrapper.style.alignItems = 'flex-end';
                 wrapper.appendChild(div);
                 wrapper.appendChild(actions);
                 box.appendChild(wrapper);
@@ -951,8 +1055,6 @@ function handleUI(request, env) {
             updateTokenUI();
         }
 
-        // --- Setup & Init ---
-
         document.addEventListener('DOMContentLoaded', async () => {
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.onclick = () => {
@@ -963,7 +1065,7 @@ function handleUI(request, env) {
                     updateThemeAndSave();
                 };
             });
-            document.getElementById('prompt').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitRequest(); } };
+            document.getElementById('prompt').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitUserPrompt(); } };
             setupImageUpload(); 
             await fetchModels(); 
             loadPreferences(); 
@@ -975,7 +1077,19 @@ function handleUI(request, env) {
                 const res = await fetch(CFG.ORIGIN + '/v1/models', { headers: { 'Authorization': 'Bearer ' + CFG.KEY } });
                 if (!res.ok) throw new Error('Failed');
                 const data = await res.json();
-                const c = data.data.filter(m => !m.id.match(/image|video|flux|midjourney|nanobanana|seedream|zimage|imagen/));
+                
+                // [免费用户专享过滤] 在前端自动屏蔽高级收费模型，只保留标准模型
+                const premiumModels = new Set([
+                    "haiku-4.5", "opus-4.5", "opus-4.6", "opus-4.7", "sonnet-4.5", "sonnet-4.6",
+                    "gemini-2.5-pro", "gemini-3.1-pro", "glm-5.1", "gpt-5.1", "gpt-5.2", 
+                    "gpt-5.2-codex", "gpt-5.3-codex", "gpt-5.3-spark", "gpt-5.4"
+                ]);
+
+                const c = data.data.filter(m => 
+                    !m.id.match(/image|video|flux|midjourney|nanobanana|seedream|zimage|imagen/) &&
+                    !premiumModels.has(m.id) // 执行拦截剔除
+                );
+                
                 const i = data.data.filter(m => m.id.match(/image|flux|midjourney|nanobanana|seedream|zimage|imagen/));
                 const v = data.data.filter(m => m.id.match(/video/));
 
@@ -1012,7 +1126,6 @@ function handleUI(request, env) {
             } catch(e) {}
         }
 
-        // --- Image Upload Logic ---
         function setupImageUpload() {
             const zone = document.getElementById('upload-zone');
             zone.onclick = (e) => { if(e.target.tagName==='BUTTON') return; const i=document.createElement('input'); i.type='file'; i.accept='image/*'; i.multiple=true; i.onchange=e=>handleFiles(e.target.files); i.click(); };
@@ -1041,40 +1154,55 @@ function handleUI(request, env) {
             }
         }
         function renderImageQueue() {
-            document.getElementById('image-queue').innerHTML = uploadedImages.map(img => \`<div class="queue-item">\${img.status === 'uploading' ? '<div style="font-size:10px;text-align:center;margin-top:20px;">上传中...</div>' : \`<img src="\${img.url}">\`}<button style="position:absolute;top:0;right:0;width:20px;height:20px;padding:0;font-size:12px;background:red;" onclick="event.stopPropagation(); window.removeImage(\${img.id})">×</button></div>\`).join('');
+            document.getElementById('image-queue').innerHTML = uploadedImages.map(img => \`<div class="queue-item">\${img.status === 'uploading' ? '<div style="font-size:10px;text-align:center;margin-top:15px;">...</div>' : \`<img src="\${img.url}">\`}<button style="position:absolute;top:0;right:0;width:18px;height:18px;padding:0;font-size:10px;background:red;min-height:18px;" onclick="event.stopPropagation(); window.removeImage(\${img.id})">×</button></div>\`).join('');
+            document.getElementById('image-queue').style.display = uploadedImages.length ? 'flex' : 'none';
         }
         window.removeImage = function(id) { uploadedImages = uploadedImages.filter(img => img.id !== id); renderImageQueue(); };
         function copyText(text) { navigator.clipboard.writeText(text); }
 
-        // --- Core Request Handling ---
-        
-        async function fetchSSEWithRetry(url, options, onMessage, maxRetries = 1) {
+        async function fetchSSEWithRetry(url, options, onMessage) {
             try {
                 const res = await fetch(url, options);
                 if (!res.ok) throw new Error((await res.text()) || '网络错误');
-                const reader = res.body.getReader(); const decoder = new TextDecoder();
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = ''; 
+                
                 while (true) {
-                    const { done, value } = await reader.read(); if (done) return; 
-                    const lines = decoder.decode(value).split('\\n').filter(l => l.startsWith('data:'));
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\\n');
+                    buffer = lines.pop(); 
+                    
                     for (const line of lines) {
-                        const data = line.substring(5).trim(); if (data === '[DONE]') return;
-                        onMessage(data);
+                        const trimmed = line.trim();
+                        if (trimmed.startsWith('data:')) {
+                            const data = trimmed.substring(5).trim();
+                            if (data === '[DONE]') return;
+                            if (data) onMessage(data);
+                        }
                     }
+                }
+                if (buffer.trim().startsWith('data:')) {
+                    const data = buffer.trim().substring(5).trim();
+                    if (data && data !== '[DONE]') onMessage(data);
                 }
             } catch (e) { throw e; }
         }
 
-        async function submitRequest() {
+        function submitUserPrompt() {
             const promptInput = document.getElementById('prompt'); const prompt = promptInput.value.trim();
-            if (!prompt) return;
             const btn = document.getElementById('btn-send');
+            
             if (btn.innerText.includes('中断')) { if (abortController) abortController.abort(); btn.innerHTML = '发送 🚀'; btn.style.background = 'var(--primary-color)'; return; }
+            if (!prompt) return;
             if (uploadedImages.some(img => img.status === 'uploading')) { alert("请等待图像上传完成！"); return; }
 
             promptInput.value = ''; 
             const sendImagesUrls = uploadedImages.map(img => img.url); 
             
-            // Generate User Message
             let userHtml = prompt;
             if (sendImagesUrls.length) userHtml += '<div style="display:flex; gap:8px; margin-top:12px;">' + sendImagesUrls.map(url => \`<img src="\${url}" style="width:70px; height:70px; object-fit:cover; border-radius:8px;">\`).join('') + '</div>';
             
@@ -1082,17 +1210,32 @@ function handleUI(request, env) {
             let userContent = sendImagesUrls.length ? [{ type: "text", text: prompt }, ...sendImagesUrls.map(url => ({ type: "image_url", image_url: { url } }))] : prompt;
             
             pushMessageToDOM({ id: userMsgId, role: 'user', content: userContent, html: userHtml });
-            
-            // Create Placeholder for AI
-            const aiMsgId = 'ai_' + Date.now();
-            pushMessageToDOM({ id: aiMsgId, role: 'ai', content: '', html: '<span class="status-dot load" style="display:inline-block;width:10px;height:10px;background:var(--primary-color);border-radius:50%;animation:blink 1s infinite;"></span> 推理中...' });
+            triggerAIGeneration();
+        }
 
+        async function triggerAIGeneration() {
+            const lastUserMsg = [...currentSessionHistory].reverse().find(m => m.role === 'user');
+            if (!lastUserMsg) return;
+
+            let prompt = "";
+            let imageUrls = [];
+            if (typeof lastUserMsg.content === 'string') {
+                prompt = lastUserMsg.content;
+            } else {
+                prompt = lastUserMsg.content.find(c => c.type === 'text')?.text || "";
+                imageUrls = lastUserMsg.content.filter(c => c.type === 'image_url').map(c => c.image_url.url);
+            }
+
+            const aiMsgId = 'ai_' + Date.now();
+            pushMessageToDOM({ id: aiMsgId, role: 'ai', content: '', html: '<span class="status-dot load" style="display:inline-block;width:10px;height:10px;background:var(--primary-color);border-radius:50%;animation:blink 1s infinite;"></span> 矩阵运算中...' });
+
+            const btn = document.getElementById('btn-send');
             btn.innerHTML = '中断 🛑'; btn.style.background = 'var(--error-color)';
             abortController = new AbortController();
 
             try {
                 if (currentMode === 'chat') await handleChat(aiMsgId);
-                else if (currentMode === 'image') await handleImage(prompt, aiMsgId, sendImagesUrls);
+                else if (currentMode === 'image') await handleImage(prompt, aiMsgId, imageUrls);
                 else if (currentMode === 'video') await handleVideo(prompt, aiMsgId);
                 else if (currentMode === 'tools') await handleTools(prompt, aiMsgId);
             } catch (e) {
@@ -1116,9 +1259,8 @@ function handleUI(request, env) {
             let fullText = '';
             const aiMsgObj = currentSessionHistory.find(m => m.id === aiMsgId);
             
-            // Build Context Payload from History (Exclude UI specific fields)
             const messagesPayload = currentSessionHistory
-                .filter(m => m.id !== aiMsgId) // exclude current empty placeholder
+                .filter(m => m.id !== aiMsgId) 
                 .map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
 
             let renderPending = false;
@@ -1128,7 +1270,7 @@ function handleUI(request, env) {
             }, (data) => {
                 try { 
                     const j = JSON.parse(data); 
-                    if (j.choices[0].delta.content) { 
+                    if (j.choices && j.choices[0].delta && typeof j.choices[0].delta.content === 'string') { 
                         fullText += j.choices[0].delta.content; 
                         aiMsgObj.content = fullText;
                         if (!renderPending) {
@@ -1140,7 +1282,7 @@ function handleUI(request, env) {
                             });
                         }
                     } 
-                } catch(e) {}
+                } catch(e) {} 
             });
             aiMsgObj.html = await renderMarkdownAsync(fullText);
             reRenderChatBox();
@@ -1166,6 +1308,9 @@ function handleUI(request, env) {
                         const finalUrl = data.url || data.data[0].url;
                         aiMsgObj.html = \`<img src="\${finalUrl}" style="width:100%; border-radius:12px; box-shadow:var(--glass-shadow);">\`;
                         aiMsgObj.content = "生成图像: " + prompt;
+                        // 注入媒体 URL 用于下载机制
+                        aiMsgObj.mediaUrl = finalUrl;
+                        aiMsgObj.mediaType = 'image';
                     } else if (data.status === 'error') throw new Error(data.message);
                     reRenderChatBox();
                 } catch(e) { if(e.message !== "Unexpected end of JSON input") throw e; }
@@ -1193,6 +1338,9 @@ function handleUI(request, env) {
                         const finalUrl = data.url || data.data[0].url;
                         aiMsgObj.html = \`<video src="\${finalUrl}" controls autoplay loop style="width:100%; border-radius:12px; box-shadow:var(--glass-shadow);"></video>\`;
                         aiMsgObj.content = "生成视频: " + prompt;
+                        // 注入媒体 URL 用于下载机制
+                        aiMsgObj.mediaUrl = finalUrl;
+                        aiMsgObj.mediaType = 'video';
                     } else if (data.status === 'error') throw new Error(data.message);
                     reRenderChatBox();
                 } catch(e) { if(e.message !== "Unexpected end of JSON input") throw e; }
